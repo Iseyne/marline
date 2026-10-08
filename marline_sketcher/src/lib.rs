@@ -1,9 +1,11 @@
 pub use aronovich_hash::{AronovichHash, AronovichHasher};
 pub use odess_hasher::{OdessHash, OdessHasher};
+pub use speedsketch::{SpeedSketchHash, SpeedSketchHasher};
 use std::hash;
 
 mod aronovich_hash;
 pub mod odess_hasher;
+pub mod speedsketch;
 
 /// Defines core hash functionality for Similarity-Based Chunking (SBC).
 pub trait SBCHash: hash::Hash + Clone + Eq + PartialEq + Default + Send + Sync {
@@ -23,6 +25,15 @@ pub trait SBCHash: hash::Hash + Clone + Eq + PartialEq + Default + Send + Sync {
 
     /// Try to represent SBCHash as slice of u64. Used primary for Odess hasher.
     fn as_slice(&self) -> &[u64];
+
+    /// Returns the 64-bit sketch of the chunk, when the hasher produces one.
+    ///
+    /// A sketch lets the delta encoder skip a fingerprint table lookup for words that provably
+    /// cannot be present in the base chunk. Hashers that do not build a sketch return
+    /// `None`, and the encoder then computes it on demand.
+    fn sketch(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// A hasher that produces `SBCHash`-compatible digests from raw data.
@@ -39,7 +50,7 @@ pub trait SBCHasher {
 
 // Gear table taken from https://github.com/nlfiedler/fastcdc-rs
 #[rustfmt::skip]
-pub(crate) const GEAR: [u64; 256] = [
+pub const GEAR: [u64; 256] = [
     0x3b5d3c7d207e37dc, 0x784d68ba91123086, 0xcd52880f882e7298, 0xeacf8e4e19fdcca7,
     0xc31f385dfbd1632b, 0x1d5f27001e25abe6, 0x83130bde3c9ad991, 0xc4b225676e9b7649,
     0xaa329b29e08eb499, 0xb67fcbd21e577d58, 0x0027baaada2acf6b, 0xe3ef2d5ac73c2226,

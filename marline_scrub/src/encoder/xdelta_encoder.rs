@@ -142,7 +142,7 @@ impl Encoder for XdeltaEncoder {
                         hash.clone(),
                         parent_data.as_slice(),
                         &word_hash_offsets,
-                        parent_hash.clone(),
+                        parent_chunk.parent_hash.clone(),
                     );
                     data_left += left;
                     processed_data += processed;

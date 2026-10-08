@@ -78,7 +78,7 @@ impl Encoder for DdeltaEncoder {
                             hash.clone(),
                             parent_data.as_slice(),
                             &mut source_chunks_indices,
-                            parent_hash.clone(),
+                            parent_chunk.parent_hash.clone(),
                         );
                     data_left += left_in_delta_chunk;
                     processed_data += processed_in_delta_chunk;

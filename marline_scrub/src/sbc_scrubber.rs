@@ -30,6 +30,18 @@ pub trait EqCluster<'a, Hash: SBCHash> {
 
 impl<'a, Hash: SBCHash> EqCluster<'a, Hash> for Clusters<'a, Hash> {
     fn partial_search(&mut self, key: &Hash, matches: usize) -> &mut Vec<ClusterPoint<'a, Hash>> {
+        // SpeedSketch selects the base chunk by the last 32 bits of the sketch, so the
+        // search degenerates to an exact match on that feature. The linear scan below could only
+        // find a candidate that `contains_key` has already ruled out, and with `matches == 0` it
+        // rejects every candidate after a single comparison, i.e. it is a full O(N) pass for
+        // nothing. Look the key up once and start a new cluster when it is unknown.
+        if matches == 0 {
+            if !self.0.contains_key(key) {
+                self.0.insert(key.clone(), vec![]);
+            }
+            return self.0.get_mut(key).unwrap();
+        }
+
         let _entry = self.0.get_mut(key);
         match self.0.contains_key(key) {
             true => self.0.get_mut(key).unwrap(),
