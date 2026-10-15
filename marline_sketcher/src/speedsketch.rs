@@ -28,6 +28,8 @@ pub const CLASS_NUM: usize = 64;
 const CLASS_MASK: u64 = CLASS_NUM as u64 - 1;
 
 /// Predefined masks, one 64-bit mask per fingerprint class, used to sample the class.
+///
+/// SpeedSketch generates 64 random 64-bit numbers as the masks.
 pub const CLASS_MASKS: [u64; CLASS_NUM] = [
     12448694272,
     15669919744,
@@ -43,7 +45,7 @@ pub const CLASS_MASKS: [u64; CLASS_NUM] = [
     56992202752,
     17095983104,
     822083584,
-    66706210816,
+    8629790720,
     27665629184,
     40282095616,
     51959037952,
@@ -228,5 +230,17 @@ impl SBCHasher for SpeedSketchHasher {
 
     fn calculate_hash(&self, chunk_data: &[u8]) -> SpeedSketchHash {
         SpeedSketchHash::from_sketch(sketch(chunk_data))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn class_masks_are_unique() {
+        let unique: HashSet<&u64> = CLASS_MASKS.iter().collect();
+        assert_eq!(unique.len(), CLASS_NUM, "CLASS_MASKS contains duplicate masks");
     }
 }
