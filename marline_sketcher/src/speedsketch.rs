@@ -162,9 +162,18 @@ pub fn class_bit_matches(fp: u64, sketch_input: u64, sketch_base: u64) -> bool {
 }
 
 /// A similarity hash carrying the full 64-bit sketch of a chunk.
+///
+/// Two parts are kept side by side: the whole sketch, which the delta encoder uses to
+/// prove that a word cannot be present in the base chunk, and the 32-bit feature extracted from
+/// it, which is the actual similarity key used for the similar chunk search.
+///
+/// Equality and hashing are defined on the feature only, so every chunk with the same feature is
+/// treated as the same key by the clusterers and the target map.
 #[derive(Default, Debug, Clone)]
 pub struct SpeedSketchHash {
+    /// Full 64-bit sketch, reused by the delta encoder.
     sketch: u64,
+    /// Last 32 bits of the sketch, used as the similarity feature.
     feature: [u64; 1],
 }
 
