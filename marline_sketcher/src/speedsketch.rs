@@ -194,10 +194,20 @@ impl SBCHash for SpeedSketchHash {
         SpeedSketchHash::from_sketch(key as u64)
     }
 
+    /// Returns the adjacent *lookup key* used to probe for a free cell in the target map,
+    /// not a neighbouring chunk by similarity.
+    ///
+    /// The sketch is a bitmask, so there is no notion of a "next" sketch: this only derives
+    /// an adjacent key (the sketch and its feature are incremented). The resulting sketch is
+    /// meaningless as a similarity value and must only be used as a key.
     fn next_hash(&self) -> Self {
         SpeedSketchHash::from_sketch(self.sketch.wrapping_add(1))
     }
 
+    /// Returns the previous adjacent *lookup key*, see [`Self::next_hash`].
+    ///
+    /// Note that wrapping below zero yields `u64::MAX` (all bits set); that value is again
+    /// only a key, not a sketch.
     fn last_hash(&self) -> Self {
         SpeedSketchHash::from_sketch(self.sketch.wrapping_sub(1))
     }
