@@ -218,7 +218,7 @@ fn process_target_chunk_with_edelta(
                     delta_code,
                 );
             } else {
-                encode_insert_instruction(target_chunk.to_vec(), delta_code);
+                encode_insert_instruction(target_chunk, delta_code);
                 *target_chunk_position += 1;
             };
         }
@@ -264,7 +264,7 @@ fn process_target_chunk_with_edelta(
                     delta_code,
                 );
             } else {
-                encode_insert_instruction(target_chunk.to_vec(), delta_code);
+                encode_insert_instruction(target_chunk, delta_code);
                 *target_chunk_position += 1;
             };
         }
@@ -283,7 +283,7 @@ fn process_target_chunk_with_ddelta(
             encode_copy_instruction(target_chunk.len(), start_of_match_in_source_data, delta_code);
         }
         None => {
-            encode_insert_instruction(target_chunk.to_vec(), delta_code);
+            encode_insert_instruction(target_chunk, delta_code);
         }
     }
 }

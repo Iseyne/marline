@@ -104,11 +104,11 @@ pub trait Encoder {
 ///   Maximum length supported is 2^23-1 bytes.
 /// * `delta_code` - Output buffer where the encoded instruction will be appended.
 ///   Must have enough capacity for 3 + insert_data.len() bytes.
-fn encode_insert_instruction(insert_data: Vec<u8>, delta_code: &mut Vec<u8>) {
+fn encode_insert_instruction(insert_data: &[u8], delta_code: &mut Vec<u8>) {
     let len_bytes = &mut (insert_data.len() as u32).to_ne_bytes()[..3];
     len_bytes[2] |= 1 << 7;
     delta_code.extend_from_slice(len_bytes);
-    delta_code.extend_from_slice(&insert_data);
+    delta_code.extend_from_slice(insert_data);
 }
 
 /// Encodes a COPY instruction.

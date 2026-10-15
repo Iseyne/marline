@@ -50,7 +50,7 @@ impl GdeltaEncoder {
 
         // A chunk shorter than a word has no fingerprint, nothing can be copied from it.
         if chunk_data.len() < word_size {
-            encode_insert_instruction(chunk_data.to_vec(), &mut delta_code);
+            encode_insert_instruction(chunk_data, &mut delta_code);
             return delta_code;
         }
 
