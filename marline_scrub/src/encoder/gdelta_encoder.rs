@@ -384,3 +384,162 @@ pub fn gdelta_diff_new(
 // and is exposed through its accessor, which is re-exported here so the other encoders can keep
 // importing it from this module.
 pub(crate) use marline_sketcher::gear;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::decoder::GdeltaDecoder;
+    use crate::encoder::encode_simple_chunk;
+    use marline_sketcher::SpeedSketchHash;
+
+    fn pattern(len: usize, seed: u8) -> Vec<u8> {
+        (0..len).map(|i| (i as u8).wrapping_mul(31).wrapping_add(seed)).collect()
+    }
+
+    /// Mirrors the base chunk state `encode_cluster` builds, so `delta_code` can be exercised
+    /// directly without a `DataContainer` cluster.
+    fn build_base(data: &[u8], sbc_hash: SpeedSketchHash) -> BaseChunk<'_, SpeedSketchHash> {
+        let word_size = speedsketch::WORD_SIZE;
+        let move_bts = 64 / word_size;
+        let mask_bts = ((data.len() as f64).log2() as usize).max(1);
+        let base_words = data.len().saturating_sub(word_size - 1);
+        let mut word_hash_offsets = HashMap::new();
+        let mut fp = 0u64;
+        for &byte in &data[..base_words.min(word_size - 1)] {
+            fp = (fp << move_bts).wrapping_add(gear(byte));
+        }
+        let mut sketch = 0u64;
+        for i in 0..base_words {
+            fp = (fp << move_bts).wrapping_add(gear(data[i + word_size - 1]));
+            word_hash_offsets.insert(fp >> (64 - mask_bts), i);
+            if speedsketch::is_proxy(fp) {
+                sketch |= 1u64 << speedsketch::class_of(fp);
+            }
+        }
+        BaseChunk { data, sbc_hash, word_hash_offsets, sketch }
+    }
+
+    fn encode(base: &[u8], new: &[u8]) -> Vec<u8> {
+        let base_chunk = build_base(base, SpeedSketchHash::new_with_u32(0));
+        GdeltaEncoder::delta_code(new, &base_chunk, speedsketch::sketch(new))
+    }
+
+    fn decode(base: &[u8], delta: &[u8]) -> Vec<u8> {
+        GdeltaDecoder::new(false).decode_chunk(base.to_vec(), delta)
+    }
+
+    /// Number of COPY instructions in a gdelta code, so a round-trip test cannot silently
+    /// degenerate into a pure INSERT of the whole chunk.
+    fn count_copies(delta: &[u8]) -> usize {
+        let mut copies = 0;
+        let mut i = 0;
+        while i < delta.len() {
+            let len = u32::from_ne_bytes([delta[i], delta[i + 1], delta[i + 2], 0]) as usize;
+            if delta[i + 2] >= 128 {
+                i += 3 + (len & 0x7f_ffff);
+            } else {
+                copies += 1;
+                i += 6;
+            }
+        }
+        copies
+    }
+
+    #[test]
+    fn roundtrip_chunk_shorter_than_word() {
+        let base = pattern(64, 0);
+        let new = b"short".to_vec();
+        let delta = encode(&base, &new);
+        assert_eq!(count_copies(&delta), 0, "a sub-word chunk has no fingerprint to copy");
+        assert_eq!(decode(&base, &delta), new);
+    }
+
+    #[test]
+    fn roundtrip_word_sized_chunk() {
+        let base = pattern(64, 0);
+        let new = base[..speedsketch::WORD_SIZE].to_vec();
+        let delta = encode(&base, &new);
+        assert_eq!(count_copies(&delta), 1, "the identical word must be copied, not inserted");
+        assert_eq!(decode(&base, &delta), new);
+    }
+
+    #[test]
+    fn roundtrip_single_byte_changed() {
+        let base = pattern(256, 0);
+        let mut new = base.clone();
+        new[100] ^= 0xff;
+        let delta = encode(&base, &new);
+        assert!(count_copies(&delta) > 0, "the untouched prefix must be copied");
+        assert_eq!(decode(&base, &delta), new);
+    }
+
+    #[test]
+    fn roundtrip_insert_tail_after_copy() {
+        let base = pattern(256, 0);
+        let mut new = base.clone();
+        new.extend_from_slice(b"appended-tail-bytes");
+        let delta = encode(&base, &new);
+        assert!(count_copies(&delta) > 0, "the unchanged head must be copied");
+        assert_eq!(decode(&base, &delta), new);
+    }
+
+    #[test]
+    fn delta_code_skips_lookup_when_class_bit_differs() {
+        let new = pattern(64, 7);
+        let empty_base = BaseChunk {
+            data: &[],
+            sbc_hash: SpeedSketchHash::new_with_u32(0),
+            word_hash_offsets: HashMap::new(),
+            sketch: 0,
+        };
+        let delta = GdeltaEncoder::delta_code(&new, &empty_base, u64::MAX);
+
+        assert_eq!(count_copies(&delta), 0, "a cleared class bit must skip every lookup");
+        assert_eq!(delta[2] & 0x80, 0x80, "the word must fall through to an INSERT");
+        let insert_len = u32::from_ne_bytes([delta[0], delta[1], delta[2] & 0x7f, 0]) as usize;
+        assert_eq!(insert_len, new.len());
+        assert_eq!(&delta[3..], new.as_slice());
+        assert_eq!(decode(&[], &delta), new);
+    }
+
+    #[test]
+    fn delta_references_parent_key_the_parent_is_stored_under() {
+        let parent = pattern(128, 1);
+        let mut child = parent.clone();
+        child[40] ^= 0x55;
+
+        let requested_parent_hash = SpeedSketchHash::new_with_u32(1000);
+        let mut map: SBCMap<GdeltaDecoder, SpeedSketchHash> = SBCMap::new(GdeltaDecoder::default());
+        map.insert(
+            SBCKey { hash: requested_parent_hash.clone(), chunk_type: ChunkType::Simple },
+            b"already-taken".to_vec(),
+        )
+        .unwrap();
+
+        let stored_key = {
+            let guard = Mutex::new(&mut map);
+            let (_, key) = encode_simple_chunk(
+                &mut guard.lock().unwrap(),
+                parent.as_slice(),
+                requested_parent_hash.clone(),
+            );
+            key
+        };
+        assert_ne!(stored_key.hash, requested_parent_hash, "an occupied key must be shifted");
+        assert_eq!(stored_key.hash, requested_parent_hash.next_hash());
+
+        let base = build_base(parent.as_slice(), stored_key.hash.clone());
+        let delta = GdeltaEncoder::delta_code(
+            child.as_slice(),
+            &base,
+            speedsketch::sketch(child.as_slice()),
+        );
+
+        let child_key = SBCKey {
+            hash: SpeedSketchHash::new_with_u32(2000),
+            chunk_type: ChunkType::Delta { parent_hash: stored_key.hash.clone(), number: 0 },
+        };
+        map.insert(child_key.clone(), delta).unwrap();
+        assert_eq!(map.get(&child_key).unwrap(), child);
+    }
+}

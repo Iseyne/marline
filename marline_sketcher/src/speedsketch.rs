@@ -262,4 +262,65 @@ mod tests {
         let unique: HashSet<&u64> = CLASS_MASKS.iter().collect();
         assert_eq!(unique.len(), CLASS_NUM, "CLASS_MASKS contains duplicate masks");
     }
+
+    fn pattern(len: usize) -> Vec<u8> {
+        (0..len).map(|i| (i as u8).wrapping_mul(31).wrapping_add(7)).collect()
+    }
+
+    #[test]
+    fn sketch_of_empty_and_subword_chunks_is_zero() {
+        assert_eq!(sketch(&[]), 0);
+        assert_eq!(sketch(&[0u8; WORD_SIZE - 1]), 0);
+    }
+
+    #[test]
+    fn sketch_of_word_sized_chunk_is_single_word_contribution() {
+        let data = [42u8; WORD_SIZE];
+        let mut fp = 0u64;
+        for &byte in &data {
+            fp = fp_step(fp, byte);
+        }
+        let expected = if is_proxy(fp) { 1u64 << class_of(fp) } else { 0 };
+        assert_eq!(sketch(&data), expected);
+    }
+
+    #[test]
+    fn sketch_is_deterministic() {
+        let data = pattern(4096);
+        assert_eq!(sketch(&data), sketch(&data.clone()));
+    }
+
+    #[test]
+    fn sketch_of_identical_bytes_collapses_to_one_class() {
+        // A constant chunk has the same fingerprint in every window, so the sketch can hold
+        // at most the single class bit of that fingerprint.
+        for byte in [0u8, 1, 0x41, 0xff] {
+            let data = vec![byte; 4096];
+            let s = sketch(&data);
+            assert!(s == 0 || s.is_power_of_two(), "byte {byte:#x} produced {s:#018x}");
+        }
+    }
+
+    #[test]
+    fn single_byte_change_keeps_shared_class_bits() {
+        let base = pattern(4096);
+        let mut changed = base.clone();
+        changed[1234] ^= 0xff;
+        assert_ne!(sketch(&base) & sketch(&changed), 0, "similar chunks must share class bits");
+    }
+
+    #[test]
+    fn class_bit_matches_equal_sketches() {
+        let fp = 0xdead_beef_1234_5678;
+        let sketch = 1u64 << class_of(fp);
+        assert!(class_bit_matches(fp, sketch, sketch));
+    }
+
+    #[test]
+    fn class_bit_difference_is_detected() {
+        let fp = 0xdead_beef_1234_5678;
+        let bit = 1u64 << class_of(fp);
+        assert!(!class_bit_matches(fp, bit, 0));
+        assert!(class_bit_matches(fp, 0, 0));
+    }
 }

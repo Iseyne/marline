@@ -367,3 +367,36 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use marline_sketcher::SpeedSketchHash;
+    use std::collections::HashMap;
+
+    #[test]
+    fn partial_search_zero_matches_reuses_existing_cluster() {
+        let mut clusters = Clusters::<SpeedSketchHash>(HashMap::new());
+        let key = SpeedSketchHash::new_with_u32(42);
+
+        let first = clusters.partial_search(&key, 0) as *const _;
+        assert!(clusters.0.contains_key(&key));
+
+        let second = clusters.partial_search(&key, 0) as *const _;
+        assert!(std::ptr::eq(first, second));
+        assert_eq!(clusters.0.len(), 1);
+    }
+
+    #[test]
+    fn partial_search_zero_matches_creates_cluster_for_new_key() {
+        let mut clusters = Clusters::<SpeedSketchHash>(HashMap::new());
+
+        clusters.partial_search(&SpeedSketchHash::new_with_u32(1), 0);
+        assert_eq!(clusters.0.len(), 1);
+        assert!(clusters.0.contains_key(&SpeedSketchHash::new_with_u32(1)));
+
+        clusters.partial_search(&SpeedSketchHash::new_with_u32(2), 0);
+        assert_eq!(clusters.0.len(), 2);
+        assert!(clusters.0.contains_key(&SpeedSketchHash::new_with_u32(2)));
+    }
+}
