@@ -1,5 +1,5 @@
 use crate::decoder::Decoder;
-use crate::encoder::gdelta_encoder::GEAR;
+use crate::encoder::gdelta_encoder::gear;
 use crate::encoder::{
     count_delta_chunks_with_hash, encode_copy_instruction, encode_insert_instruction,
     get_parent_data, Encoder,
@@ -485,8 +485,7 @@ fn gear_chunking(data: &[u8]) -> Vec<&[u8]> {
     let mask = (1 << AVERAGE_CHUNK_SIZE.next_power_of_two().trailing_zeros()) - 1;
     let mut data_index = 0;
     while data_index < data.len() {
-        current_window_hash =
-            (current_window_hash << 1).wrapping_add(GEAR[data[data_index] as usize]);
+        current_window_hash = (current_window_hash << 1).wrapping_add(gear(data[data_index]));
 
         if (current_window_hash & mask) == CHUNK_THRESHOLD {
             source_chunks.push(&data[start_current_chunk..data_index]);

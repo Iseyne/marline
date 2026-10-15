@@ -58,12 +58,12 @@ impl GdeltaEncoder {
         let mut anchor: usize = 0;
         let mut fp = 0u64;
 
-        for j in 0..(word_size - 1) {
-            fp = (fp << move_bts).wrapping_add(GEAR[chunk_data[j] as usize]);
+        for &byte in &chunk_data[..word_size - 1] {
+            fp = (fp << move_bts).wrapping_add(gear(byte));
         }
         let mut j = 0;
         while j < (chunk_data.len() - word_size + 1) {
-            fp = (fp << move_bts).wrapping_add(GEAR[chunk_data[j + word_size - 1] as usize]);
+            fp = (fp << move_bts).wrapping_add(gear(chunk_data[j + word_size - 1]));
             let word_hash: u64 = fp >> (64 - mask_bts);
 
             // Differing class bits prove the word is absent from the base chunk, so the
@@ -98,8 +98,8 @@ impl GdeltaEncoder {
                         anchor = j + equal_part_len;
                         j = anchor - 1; // Update j to skip the matched part
                         if j < chunk_data.len() - word_size {
-                            for k in anchor..(anchor + word_size - 1) {
-                                fp = (fp << move_bts).wrapping_add(GEAR[chunk_data[k] as usize]);
+                            for &byte in &chunk_data[anchor..anchor + word_size - 1] {
+                                fp = (fp << move_bts).wrapping_add(gear(byte));
                             }
                         }
                     }
@@ -174,12 +174,12 @@ impl Encoder for GdeltaEncoder {
         // otherwise the exclusion could drop a word that is really there.
         let mut base_sketch: u64 = 0;
 
-        for i in 0..base_words.min(word_size - 1) {
-            fp = (fp << move_bts).wrapping_add(GEAR[parent_data[i] as usize]);
+        for &byte in &parent_data[..base_words.min(word_size - 1)] {
+            fp = (fp << move_bts).wrapping_add(gear(byte));
         }
 
         for i in 0..base_words {
-            fp = (fp << move_bts).wrapping_add(GEAR[parent_data[i + word_size - 1] as usize]);
+            fp = (fp << move_bts).wrapping_add(gear(parent_data[i + word_size - 1]));
             let word_hash: u64 = fp >> (64 - mask_bts);
             word_hash_offsets.insert(word_hash, i);
             if speedsketch::is_proxy(fp) {
@@ -227,12 +227,12 @@ pub fn gdelta_diff(new_chunk: &[u8], base_chunk: &[u8]) -> Vec<u8> {
     let mut word_hash_offsets: HashMap<u64, usize> = HashMap::with_capacity(base_chunk.len());
     let mut fp: u64 = 0;
 
-    for i in 0..(word_size - 1) {
-        fp = (fp << move_bts).wrapping_add(GEAR[base_chunk[i] as usize]);
+    for &byte in &base_chunk[..word_size - 1] {
+        fp = (fp << move_bts).wrapping_add(gear(byte));
     }
 
     for i in word_size..(base_chunk.len() - word_size + 1) {
-        fp = (fp << move_bts).wrapping_add(GEAR[base_chunk[i + word_size - 1] as usize]);
+        fp = (fp << move_bts).wrapping_add(gear(base_chunk[i + word_size - 1]));
         let word_hash: u64 = fp >> (64 - mask_bts);
         word_hash_offsets.insert(word_hash, i);
     }
@@ -241,13 +241,13 @@ pub fn gdelta_diff(new_chunk: &[u8], base_chunk: &[u8]) -> Vec<u8> {
     let mut anchor: usize = 0;
     let mut fp = 0u64;
 
-    for j in 0..(word_size - 1) {
-        fp = (fp << move_bts).wrapping_add(GEAR[new_chunk[j] as usize]);
+    for &byte in &new_chunk[..word_size - 1] {
+        fp = (fp << move_bts).wrapping_add(gear(byte));
     }
 
     let mut j = 0;
     while j + word_size <= new_chunk.len() {
-        fp = (fp << move_bts).wrapping_add(GEAR[new_chunk[j + word_size - 1] as usize]);
+        fp = (fp << move_bts).wrapping_add(gear(new_chunk[j + word_size - 1]));
         let word_hash: u64 = fp >> (64 - mask_bts);
 
         if let Some(&offset) = word_hash_offsets.get(&word_hash) {
@@ -277,8 +277,8 @@ pub fn gdelta_diff(new_chunk: &[u8], base_chunk: &[u8]) -> Vec<u8> {
                 anchor = j + equal_part_len;
                 j = anchor - 1;
                 if j < new_chunk.len() - word_size {
-                    for k in anchor..(anchor + word_size - 1) {
-                        fp = (fp << move_bts).wrapping_add(GEAR[new_chunk[k] as usize]);
+                    for &byte in &new_chunk[anchor..anchor + word_size - 1] {
+                        fp = (fp << move_bts).wrapping_add(gear(byte));
                     }
                 }
             }
@@ -320,13 +320,13 @@ pub fn gdelta_diff_new(
     let mut anchor: usize = 0;
     let mut fp = 0u64;
 
-    for j in 0..(word_size - 1) {
-        fp = (fp << move_bts).wrapping_add(GEAR[new_chunk[j] as usize]);
+    for &byte in &new_chunk[..word_size - 1] {
+        fp = (fp << move_bts).wrapping_add(gear(byte));
     }
 
     let mut j = 0;
     while j + word_size <= new_len {
-        fp = (fp << move_bts).wrapping_add(GEAR[new_chunk[j + word_size - 1] as usize]);
+        fp = (fp << move_bts).wrapping_add(gear(new_chunk[j + word_size - 1]));
         let word_hash: u64 = fp >> (64 - mask_bts);
 
         if let Some(&offset) = manifest.get(&(word_hash)) {
@@ -356,8 +356,8 @@ pub fn gdelta_diff_new(
                 anchor = j + equal_part_len;
                 j = anchor - 1;
                 if j < new_len - word_size {
-                    for k in anchor..(anchor + word_size - 1) {
-                        fp = (fp << move_bts).wrapping_add(GEAR[new_chunk[k] as usize]);
+                    for &byte in &new_chunk[anchor..anchor + word_size - 1] {
+                        fp = (fp << move_bts).wrapping_add(gear(byte));
                     }
                 }
             }
@@ -378,10 +378,9 @@ pub fn gdelta_diff_new(
     delta_code
 }
 
-// Gear table taken from https://github.com/nlfiedler/fastcdc-rs
-#[rustfmt::skip]
 // Gdelta fingerprints and the SpeedSketch fingerprints must come out of the very same gear
 // table, otherwise a word of the base chunk could miss the class bit in its sketch and the
-// exclusion would drop a word that is really there. Keep a single definition and re-export it, so that
-// the other encoders can keep importing it from here.
-pub(crate) use marline_sketcher::GEAR;
+// exclusion would drop a word that is really there. The table stays private to `marline_sketcher`
+// and is exposed through its accessor, which is re-exported here so the other encoders can keep
+// importing it from this module.
+pub(crate) use marline_sketcher::gear;

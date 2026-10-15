@@ -50,7 +50,7 @@ pub trait SBCHasher {
 
 // Gear table taken from https://github.com/nlfiedler/fastcdc-rs
 #[rustfmt::skip]
-pub const GEAR: [u64; 256] = [
+pub(crate) const GEAR: [u64; 256] = [
     0x3b5d3c7d207e37dc, 0x784d68ba91123086, 0xcd52880f882e7298, 0xeacf8e4e19fdcca7,
     0xc31f385dfbd1632b, 0x1d5f27001e25abe6, 0x83130bde3c9ad991, 0xc4b225676e9b7649,
     0xaa329b29e08eb499, 0xb67fcbd21e577d58, 0x0027baaada2acf6b, 0xe3ef2d5ac73c2226,
@@ -116,3 +116,12 @@ pub const GEAR: [u64; 256] = [
     0xfb1e6e22e08a03b3, 0xea635fdba3698dd0, 0xcf53659328503a5c, 0xcde3b31e6fd5d780,
     0x8e3e4221d3614413, 0xef14d0d86bf1a22c, 0xe1d830d3f16c5ddb, 0xaabd2b2a451504e1
 ];
+
+/// Returns the Gear table entry for `byte`.
+///
+/// Consumers that need the same rolling hash can use this instead of the table itself, which
+/// stays an implementation detail of the crate.
+#[inline(always)]
+pub fn gear(byte: u8) -> u64 {
+    GEAR[byte as usize]
+}
