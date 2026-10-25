@@ -49,6 +49,17 @@ impl Corpus {
             .map(Vec::len)
             .sum()
     }
+
+    /// All documents flattened (order is stable for a given seed).
+    pub fn all(&self) -> Vec<Vec<u8>> {
+        let mut all = Vec::new();
+        for group in &self.similar_groups {
+            all.extend(group.iter().cloned());
+        }
+        all.extend(self.unrelated.iter().cloned());
+        all.extend(self.edge_cases.iter().cloned());
+        all
+    }
 }
 
 struct Rng {
@@ -132,6 +143,11 @@ pub fn build(seed: u64, opts: &Options) -> Corpus {
 }
 
 /// Applies deterministic edits (replace/insert/delete) to the base.
+///
+/// Edits are confined to a randomly placed contiguous window covering a small
+/// fraction of the document, like real near-duplicates (a few changed
+/// regions). Scattering edits across the whole document would perturb every
+/// rolling-hash mark and defeat similarity hashing entirely.
 fn mutate(base: &[u8], seed: u64, fraction: f64) -> Vec<u8> {
     let mut out = base.to_vec();
     if out.is_empty() {
@@ -139,27 +155,30 @@ fn mutate(base: &[u8], seed: u64, fraction: f64) -> Vec<u8> {
     }
 
     let mut rng = Rng::new(seed);
-    let edits = ((base.len() as f64 * fraction) as usize).clamp(1, base.len());
+    let window_len = (base.len() / 16).max(64).min(base.len());
+    let window_start = rng.next_usize(base.len() - window_len + 1);
+    let window_end = window_start + window_len;
+    let edits = ((window_len as f64 * fraction) as usize).clamp(1, window_len);
 
     for _ in 0..edits {
+        let idx_in_window = rng.next_usize(window_len);
+        let idx = window_start + idx_in_window;
         match rng.next_usize(3) {
             0 => {
-                let idx = rng.next_usize(out.len());
-                let n = 1 + rng.next_usize(4).min(out.len() - idx);
+                let n = 1 + rng.next_usize(4).min(window_end - idx);
                 for b in out.iter_mut().skip(idx).take(n) {
                     *b = (rng.next_u64() & 0xff) as u8;
                 }
             }
             1 => {
-                let idx = rng.next_usize(out.len() + 1);
+                let insert_idx = rng.next_usize(window_len + 1);
                 let block_len = 1 + rng.next_usize(16);
                 let block = rng.bytes(block_len);
-                out.splice(idx..idx, block);
+                out.splice(window_start + insert_idx..window_start + insert_idx, block);
             }
             _ => {
-                if out.len() > 1 {
-                    let idx = rng.next_usize(out.len());
-                    let n = 1 + rng.next_usize(8).min(out.len() - idx - 1);
+                if window_end - idx > 1 {
+                    let n = 1 + rng.next_usize(8).min(window_end - idx - 1);
                     out.drain(idx..idx + n);
                 }
             }
