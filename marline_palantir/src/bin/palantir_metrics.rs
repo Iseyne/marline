@@ -181,10 +181,20 @@ fn run_sbc(name: &str, kernel_files: &[Vec<Vec<u8>>]) {
 }
 
 fn ensure_datasets() -> Vec<std::path::PathBuf> {
-    const KERNEL_VERSIONS: [&str; 5] =
-        //   ["linux-3.4.5", "linux-3.4.6", "linux-3.4.7", "linux-3.4.8", "linux-3.4.9"];
-        //       ["linux-3.4.5", "linux-3.5.6", "linux-3.6.7", "linux-3.7.8", "linux-3.8.9"];
-        ["linux-3.4.5", "linux-3.6.6", "linux-3.8.7", "linux-3.10.8", "linux-3.12.9"];
+    const KERNEL_VERSIONS: [&str; 9] = [
+        // Group A: the 3.x incremental chain, including the 3.4.5 -> 3.4.6
+        // micro-increment and the final releases of the 3.x line.
+        "linux-3.4.5",
+        "linux-3.4.6",
+        "linux-3.6.6",
+        "linux-3.8.7",
+        "linux-3.10.8",
+        "linux-3.12.9",
+        "linux-3.14.79",
+        "linux-3.16.85",
+        // Group B: a single 4.x release for the epoch jump.
+        "linux-4.4.302",
+    ];
 
     let base = match std::env::var_os("MARLINE_DATA_DIR") {
         Some(v) => std::path::PathBuf::from(v),
@@ -220,7 +230,9 @@ fn ensure_datasets() -> Vec<std::path::PathBuf> {
 }
 
 fn download_kernel(version: &str, base: &std::path::Path) {
-    let url = format!("https://cdn.kernel.org/pub/linux/kernel/v3.x/{}.tar.xz", version);
+    // kernel.org directories are per major version: v3.x/, v4.x/, v5.x/...
+    let major = version.strip_prefix("linux-").and_then(|v| v.split('.').next()).unwrap_or("3");
+    let url = format!("https://cdn.kernel.org/pub/linux/kernel/v{major}.x/{version}.tar.xz");
     let archive = base.join(format!("{}.tar.xz", version));
 
     // try curl, then wget
